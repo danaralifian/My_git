@@ -1,0 +1,182 @@
+#include "stdafx.h"
+
+#include <iostream>
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/opencv.hpp"
+
+using namespace cv;
+using namespace std;
+
+double centroid1=0, centroid2=0;
+float x1, yy1, x2, y2;
+bool detect1=false,detect2=false;
+
+
+
+//callback for trackbar. nothing to be done here   
+void on_trackbar(int, void*)
+{
+ 
+}
+
+IplImage* threshold(IplImage* frame, CvSize size, CvScalar hsv_min, CvScalar hsv_max, int deep){
+
+ IplImage*  hsv_frame = cvCreateImage(size, IPL_DEPTH_8U, 3); // image converted to HSV plane
+ IplImage*  thresholded = cvCreateImage(size, IPL_DEPTH_8U, deep); // final thresholded image
+ 
+
+ // Covert color space to HSV as it is much easier to filter colors in the HSV color-space.
+ cvCvtColor(frame, hsv_frame, CV_BGR2HSV);
+ 
+ // Filter out colors which are out of range.
+ cvInRangeS(hsv_frame, hsv_min, hsv_max, thresholded);
+ 
+ // hough detector works better with some smoothing of the image
+ cvSmooth(thresholded,thresholded, CV_GAUSSIAN, 9, 9);
+ return thresholded;
+}
+
+IplImage* image_cycle(IplImage* thresholded, IplImage* frame_original, CvSize size, int deep,int camp){
+ IplImage*  frame = cvCreateImage(size, IPL_DEPTH_8U, deep); // final thresholded image
+ 
+ bool terdeteksi = false;
+ // Memory for hough circles
+ CvMemStorage* storage = cvCreateMemStorage(0);
+ // hough detector works better with some smoothing of the image
+ cvSmooth(thresholded, thresholded, CV_GAUSSIAN, 9, 9);
+ //hough transform to detect circle
+ CvSeq* circles = cvHoughCircles(thresholded, storage, CV_HOUGH_GRADIENT, 2,
+  thresholded->height / 4, 100, 50, 10, 400);
+
+ for (int i = 0; i < circles->total; i++)
+ {   //get the parameters of circles detected
+  terdeteksi = true;
+  float* p = (float*)cvGetSeqElem(circles, i);
+  //printf("Ball! x=%f y=%f r=%f\n\r", p[0], p[1], p[2]);
+
+  // draw a circle with the centre and the radius obtained from the hough transform
+  cvCircle(frame_original, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot centre
+   2, CV_RGB(255, 255, 255), -1, 8, 0);
+  
+
+  
+  cvCircle(frame_original, cvPoint(cvRound(p[0]), cvRound(p[1])),  //plot circle
+   cvRound(p[2]), CV_RGB(0, 255, 0), 2, 8, 0);
+ }
+
+
+ return frame_original;
+}
+
+
+
+
+int main(int argc, char* argv[])
+{
+ int height, width, step, channels;  //parameters of the image we are working on
+ int i, j, k, hmin = 0, hmax = 0, smin = 0, smax = 0, vmin = 0, vmax = 0; // other variables used
+ CvFont * font = new CvFont;
+ cvInitFont(font, CV_FONT_VECTOR0, 0.5f, 1.0f, 0, 1, 8);
+
+ CvMat* threshold_matrix = cvCreateMat(2, 3, CV_32FC1);
+
+ CvFileStorage* temp = cvOpenFileStorage("threshold_matrix.xml", NULL, CV_STORAGE_READ);
+
+ // Load the previous values of the threshold if they exist
+ if (temp)
+ {
+  threshold_matrix = (CvMat*)cvLoad("threshold_matrix.xml");
+  hmin = (int)CV_MAT_ELEM(*threshold_matrix, float, 0, 0);
+  smin = (int)CV_MAT_ELEM(*threshold_matrix, float, 0, 1);
+  vmin = (int)CV_MAT_ELEM(*threshold_matrix, float, 0, 2);
+
+  hmax = (int)CV_MAT_ELEM(*threshold_matrix, float, 1, 0);
+  smax = (int)CV_MAT_ELEM(*threshold_matrix, float, 1, 1);
+  vmax = (int)CV_MAT_ELEM(*threshold_matrix, float, 1, 2);
+ }
+
+
+
+ // Open capture device. 0 is /dev/video0, 1 is /dev/video1, etc.
+ CvCapture* capture_1 = cvCaptureFromCAM(1);
+ CvCapture* capture_2 = cvCaptureFromCAM(2);
+
+ if (!capture_1 || !capture_2)
+ {
+  fprintf(stderr, "ERROR: capture is NULL \n");
+  getchar();
+  return -1;
+ }
+
+ // grab an image from the capture
+ IplImage* frame_1 = cvQueryFrame(capture_1);
+
+
+ cvNamedWindow("F1", CV_WINDOW_AUTOSIZE);
+ 
+ /// Create Trackbars
+ char TrackbarName1[50] = "Hmin";
+ char TrackbarName2[50] = "Hmax";
+ char TrackbarName3[50] = "Smin";
+ char TrackbarName4[50] = "Smax";
+ char TrackbarName5[50] = "Vmin";
+ char TrackbarName6[50] = "Vmax";
+
+ cvCreateTrackbar(TrackbarName1, "F1", &hmin, 179);
+ cvCreateTrackbar(TrackbarName2, "F1", &hmax, 179);
+ cvCreateTrackbar(TrackbarName3, "F1", &smin, 255);
+ cvCreateTrackbar(TrackbarName4, "F1", &smax, 255);
+ cvCreateTrackbar(TrackbarName5, "F1", &vmin, 255);
+ cvCreateTrackbar(TrackbarName6, "F1", &vmax, 255);
+ 
+ 
+ // Load threshold from the slider bars in these 2 parameters
+ CvScalar hsv_min = cvScalar(hmin, smin, vmin, 0);
+ CvScalar hsv_max = cvScalar(hmax, smax, vmax, 0);
+
+ // get the image data
+ height = frame_1->height;
+ width = frame_1->width;
+ step = frame_1->widthStep;
+
+ // capture size -
+ CvSize size = cvSize(width, height);
+
+ // Initialize different images that are going to be used in the program
+ 
+
+ while (1)
+ { // Load threshold from the slider bars in these 2 parameters
+  hsv_min = cvScalar(hmin, smin, vmin, 0);
+  hsv_max = cvScalar(hmax, smax, vmax, 0);
+  // Get one frame
+  frame_1 = cvQueryFrame(capture_1);
+  if (!frame_1)
+  {
+   fprintf(stderr, "ERROR: frame is null...\n");
+   getchar();
+   break;
+  }
+
+  IplImage* frame_camp1 = threshold(frame_1, size, hsv_min, hsv_max, 1);
+  cvShowImage("filter", frame_camp1);
+  frame_camp1 = image_cycle(frame_camp1, frame_1,size, 1,2);
+  cvShowImage("Camera 2", frame_camp1);
+  if ((cvWaitKey(10) & 255) == 27) break;
+  //Asli
+ }
+
+ //Save the threshold values before exiting
+ *((float*)CV_MAT_ELEM_PTR(*threshold_matrix, 0, 0)) = hmin;
+ *((float*)CV_MAT_ELEM_PTR(*threshold_matrix, 0, 1)) = smin;
+ *((float*)CV_MAT_ELEM_PTR(*threshold_matrix, 0, 2)) = vmin;
+ *((float*)CV_MAT_ELEM_PTR(*threshold_matrix, 1, 0)) = hmax;
+ *((float*)CV_MAT_ELEM_PTR(*threshold_matrix, 1, 1)) = smax;
+ *((float*)CV_MAT_ELEM_PTR(*threshold_matrix, 1, 2)) = vmax;
+ cvSave("threshold_matrix.xml", threshold_matrix);
+ cvReleaseCapture(&capture_1);
+ cvReleaseCapture(&capture_2);
+ cvDestroyWindow("mywindow");
+ return 0;
+}

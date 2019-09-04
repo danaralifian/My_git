@@ -1,0 +1,13 @@
+kuning
+lower : 29,86,6
+upper : 64,255,255
+cvScalar(20, 100, 100), cvScalar(30, 255, 255)
+
+orange
+lower : 15,86,6
+upper : 25,255,255
+
+kuning (jam 4 sore)
+lower : 29,200,6
+upper : 64,255,255
+secondary = cvScalar(20, 100, 100), cvScalar(30, 255, 255)
